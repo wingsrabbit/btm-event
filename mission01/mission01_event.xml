@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+  ============================================================================
+  UMP45 派系事件：炸弹恐慌任务
+  作者：基于原版 FactionEvents.xml 的学习与实践
+  ============================================================================
+-->
+<RandomEvents>
+  <EventPrefabs>
+
+    <!-- ====================================================================
+         事件名称：UMP45 派系炸弹恐慌任务
+         触发条件：
+         1. 玩家当前所在地点必须是前哨站(Outpost)或军事基地(Military)
+         2. 玩家与 UMP45 派系的声望值必须 >= 100
+         ==================================================================== -->
+    <ScriptedEvent 
+      identifier="ump45_bombpanic_mission" 
+      commonness="100" 
+      requiredDestinationTypes="outpost,military"
+    >
+      <!-- 
+        identifier: 事件的唯一标识符，全局不可重复
+        commonness: 触发权重，100为基准值
+        requiredDestinationTypes: 限制触发地点类型
+          - outpost = 前哨站
+          - military = 军事基地
+        参考来源：FactionEvents.xml 中的 requiredDestinationTypes="anyoutpost" 写法
+      -->
+
+      <!-- ================ 第一步：声望检测 ================ -->
+      <!-- 检查玩家与 UMP45 派系的声望是否达到 100（核心圈成员） -->
+      <CheckReputationAction targettype="faction" identifier="UMP45" condition="gte 100">
+        <!-- 
+          targettype="faction": 检测目标类型为派系
+          identifier="UMP45": 指定派系ID为 UMP45
+          condition="gte 100": 条件为 >= 100（gte = greater than or equal）
+          参考来源：FactionEvents_Analysis.md 中的 CheckReputationAction 示例
+        -->
+
+        <Failure>
+          <!-- 声望不足时，事件静默结束，不执行任何操作 -->
+          <!-- 这是标准做法，参考自 MissionEvents.xml 中的护送任务事件 -->
+        </Failure>
+
+        <Success>
+          <!-- 声望满足条件，继续执行事件逻辑 -->
+
+          <!-- ================ 第二步：标记玩家 ================ -->
+          <!-- 给玩家贴上 "player" 标签，方便后续操作引用 -->
+          <TagAction criteria="player" tag="player" />
+          <!-- 
+            criteria="player": 寻找条件为"是玩家"
+            tag="player": 贴上名为 "player" 的标签
+            参考来源：这是几乎所有事件的标准开头，见 OutpostEvents_Analysis.md
+          -->
+
+          <!-- ================ 第三步：生成任务NPC ================ -->
+          <!-- 在前哨站内生成一个联络员NPC -->
+          <SpawnAction 
+            npcsetidentifier="outpostnpcs1" 
+            npcidentifier="securitynpc[faction]" 
+            targettag="ump45_contact" 
+            spawnlocation="Outpost" 
+            targetmoduletags="admin,adminmodule"
+            allowduplicates="false"
+          />
+          <!-- 
+            npcsetidentifier="outpostnpcs1": 使用前哨站NPC模板集
+            npcidentifier="securitynpc[faction]": 
+              - 生成安保人员类型的NPC
+              - [faction] 会自动替换为当前前哨站的派系外观
+            targettag="ump45_contact": 给NPC贴上标签，方便后续引用
+            spawnlocation="Outpost": 在前哨站内生成
+            targetmoduletags="admin,adminmodule": 优先在管理区域生成
+            allowduplicates="false": 防止生成多个相同NPC
+            参考来源：FactionEvents.xml 中的 coalitionspecialhire1 事件
+          -->
+
+          <!-- ================ 第四步：等待玩家交互 ================ -->
+          <!-- 设置触发器：等待玩家靠近NPC并主动互动（按E） -->
+          <TriggerAction 
+            target1tag="ump45_contact" 
+            target2tag="player" 
+            applytotarget2="triggerer_player" 
+            radius="150" 
+            waitforinteraction="true"
+          />
+          <!-- 
+            target1tag/target2tag: 监测这两个目标之间的距离
+            applytotarget2="triggerer_player": 
+              - 将触发互动的玩家标记为 "triggerer_player"
+              - 这在多人游戏中很重要，确保只有交互的玩家看到对话
+            radius="150": 触发距离（像素）
+            waitforinteraction="true": 需要玩家主动按E互动
+            参考来源：OutpostEvents.xml 中的 givingdirections 事件
+          -->
+
+          <!-- ================ 第五步：NPC跟随玩家 ================ -->
+          <!-- 让NPC跟随触发对话的玩家，增加沉浸感 -->
+          <NPCFollowAction npctag="ump45_contact" targettag="triggerer_player" follow="true" />
+          <!-- 
+            npctag: 要移动的NPC的标签
+            targettag: 跟随目标的标签
+            follow="true": 开始跟随
+            参考来源：FactionEvents_Analysis.md 中的 NPCFollowAction 讲解
+          -->
+
+          <!-- ================ 第六步：触发对话并派发任务 ================ -->
+          <!-- 100%概率触发对话，玩家可选择接受"炸弹恐慌"任务 -->
+          <ConversationAction 
+            targettag="triggerer_player" 
+            text="同志，你来得正好。我是UMP45派系的联络员。我们收到情报，有人在这个区域藏了一枚炸弹，情况非常紧急！你愿意协助我们排除这个威胁吗？"
+            speakertag="ump45_contact"
+            dialogtype="Regular"
+          >
+            <!-- 
+              targettag: 对话目标（触发交互的玩家）
+              text: 对话内容（直接写中文，或使用本地化ID）
+              speakertag: 说话人（之前生成的NPC）
+              dialogtype="Regular": 使用标准对话框
+              参考来源：Barotrauma_Event_Guide.md 中的 ConversationAction 参数说明
+            -->
+
+            <!-- 选项1：接受任务 -->
+            <Option text="没问题，我这就去处理！">
+              <!-- 
+                玩家选择接受任务
+                100%概率触发 "炸弹恐慌" 任务
+              -->
+              <ConversationAction 
+                targettag="triggerer_player" 
+                text="太好了！炸弹可能藏在储物柜里。你需要找到它并安全拆除。完成后回来向我汇报，UMP45派系不会亏待自己人的！"
+                speakertag="ump45_contact"
+              />
+              
+              <!-- 派发任务：炸弹恐慌 (Bomb Panic) -->
+              <MissionAction missiontag="bombscare" />
+              <!-- 
+                missiontag="bombscare": 通过标签触发任务
+                  - "bombscare" 是原版炸弹恐慌任务的标签
+                  - 如果你有自定义任务，可以改成自定义任务的identifier
+                参考来源：MissionEvents_Analysis.md 中的 MissionAction 说明
+              -->
+
+              <!-- 增加玩家与UMP45派系的声望 -->
+              <ReputationAction targettype="Faction" identifier="UMP45" increase="5" />
+              <!-- 
+                targettype="Faction": 目标类型为派系
+                identifier="UMP45": 指定派系
+                increase="5": 增加5点声望
+                参考来源：FactionEvents_Analysis.md 中的 ReputationAction 示例
+              -->
+
+            </Option>
+
+            <!-- 选项2：拒绝任务 -->
+            <Option text="抱歉，我现在有别的事要忙。" endconversation="true">
+              <!-- 
+                endconversation="true": 选择后直接结束对话
+                玩家拒绝时，事件正常结束，不派发任务
+              -->
+              <ConversationAction 
+                targettag="triggerer_player" 
+                text="我理解，任务有风险。如果你改变主意，随时来找我。"
+                speakertag="ump45_contact"
+                dialogtype="Small"
+              />
+            </Option>
+
+            <!-- 选项3：询问更多信息 -->
+            <Option text="能告诉我更多细节吗？">
+              <ConversationAction 
+                targettag="triggerer_player" 
+                text="情报显示，炸弹是一枚定时装置，可能藏在基地的储物柜中。你需要电气技能来安全拆除它。如果你的技能足够，可以获得丰厚的报酬。"
+                speakertag="ump45_contact"
+              >
+                <!-- 了解详情后，再次给出选择 -->
+                <Option text="好，我接受这个任务！">
+                  <ConversationAction 
+                    targettag="triggerer_player" 
+                    text="很好，祝你好运，同志！"
+                    speakertag="ump45_contact"
+                  />
+                  <MissionAction missiontag="bombscare" />
+                  <ReputationAction targettype="Faction" identifier="UMP45" increase="5" />
+                </Option>
+
+                <Option text="风险太高了，我还是算了。" endconversation="true">
+                  <ConversationAction 
+                    targettag="triggerer_player" 
+                    text="没关系，保重。"
+                    speakertag="ump45_contact"
+                    dialogtype="Small"
+                  />
+                </Option>
+              </ConversationAction>
+            </Option>
+
+          </ConversationAction>
+
+          <!-- ================ 第七步：结束NPC跟随 ================ -->
+          <!-- 对话结束后，让NPC停止跟随 -->
+          <NPCFollowAction npctag="ump45_contact" targettag="triggerer_player" follow="false" />
+
+        </Success>
+      </CheckReputationAction>
+
+    </ScriptedEvent>
+
+  </EventPrefabs>
+</RandomEvents>
